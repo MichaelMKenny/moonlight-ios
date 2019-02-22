@@ -13,8 +13,12 @@
 #import "ControllerSupport.h"
 #import "KeyboardSupport.h"
 
+#define USE_RAW_KEY_EVENTS 1
+
 @interface StreamView ()
+#ifdef USE_RAW_KEY_EVENTS
 @property (nonatomic, strong) NSDictionary *mappings;
+#endif
 @end
 
 @implementation StreamView {
@@ -208,41 +212,45 @@
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
-//    // This method is called when the "Return" key is pressed.
-//    LiSendKeyboardEvent(0x0d, KEY_ACTION_DOWN, 0);
-//    usleep(50 * 1000);
-//    LiSendKeyboardEvent(0x0d, KEY_ACTION_UP, 0);
+#ifndef USE_RAW_KEY_EVENTS
+    // This method is called when the "Return" key is pressed.
+    LiSendKeyboardEvent(0x0d, KEY_ACTION_DOWN, 0);
+    usleep(50 * 1000);
+    LiSendKeyboardEvent(0x0d, KEY_ACTION_UP, 0);
+#endif
     return NO;
 }
 
 - (void)onKeyboardPressed:(UITextField *)textField {
-//    NSString* inputText = textField.text;
-//    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-//        // If the text became empty, we know the user pressed the backspace key.
-//        if ([inputText isEqual:@""]) {
-//            LiSendKeyboardEvent(0x08, KEY_ACTION_DOWN, 0);
-//            usleep(50 * 1000);
-//            LiSendKeyboardEvent(0x08, KEY_ACTION_UP, 0);
-//        } else {
-//            // Character 0 will be our known sentinel value
-//            for (int i = 1; i < [inputText length]; i++) {
-//                struct KeyEvent event = [KeyboardSupport translateKeyEvent:[inputText characterAtIndex:i] withModifierFlags:0];
-//                if (event.keycode == 0) {
-//                    // If we don't know the code, don't send anything.
-//                    Log(LOG_W, @"Unknown key code: [%c]", [inputText characterAtIndex:i]);
-//                    continue;
-//                }
-//                [self sendLowLevelEvent:event];
-//            }
-//        }
-//    });
-//
-//    // Reset text field back to known state
-//    textField.text = @"0";
-//
-//    // Move the insertion point back to the end of the text box
-//    UITextRange *textRange = [textField textRangeFromPosition:textField.endOfDocument toPosition:textField.endOfDocument];
-//    [textField setSelectedTextRange:textRange];
+#ifndef USE_RAW_KEY_EVENTS
+    NSString* inputText = textField.text;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+        // If the text became empty, we know the user pressed the backspace key.
+        if ([inputText isEqual:@""]) {
+            LiSendKeyboardEvent(0x08, KEY_ACTION_DOWN, 0);
+            usleep(50 * 1000);
+            LiSendKeyboardEvent(0x08, KEY_ACTION_UP, 0);
+        } else {
+            // Character 0 will be our known sentinel value
+            for (int i = 1; i < [inputText length]; i++) {
+                struct KeyEvent event = [KeyboardSupport translateKeyEvent:[inputText characterAtIndex:i] withModifierFlags:0];
+                if (event.keycode == 0) {
+                    // If we don't know the code, don't send anything.
+                    Log(LOG_W, @"Unknown key code: [%c]", [inputText characterAtIndex:i]);
+                    continue;
+                }
+                [self sendLowLevelEvent:event];
+            }
+        }
+    });
+
+    // Reset text field back to known state
+    textField.text = @"0";
+
+    // Move the insertion point back to the end of the text box
+    UITextRange *textRange = [textField textRangeFromPosition:textField.endOfDocument toPosition:textField.endOfDocument];
+    [textField setSelectedTextRange:textRange];
+#endif
 }
 
 - (void)specialCharPressed:(UIKeyCommand *)cmd {
@@ -257,19 +265,21 @@
 }
 
 - (void)sendLowLevelEvent:(struct KeyEvent)event {
-//    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-//        // When we want to send a modified key (like uppercase letters) we need to send the
-//        // modifier ("shift") seperately from the key itself.
-//        if (event.modifier != 0) {
-//            LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_DOWN, event.modifier);
-//        }
-//        LiSendKeyboardEvent(event.keycode, KEY_ACTION_DOWN, event.modifier);
-//        usleep(50 * 1000);
-//        LiSendKeyboardEvent(event.keycode, KEY_ACTION_UP, event.modifier);
-//        if (event.modifier != 0) {
-//            LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_UP, event.modifier);
-//        }
-//    });
+#ifndef USE_RAW_KEY_EVENTS
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+        // When we want to send a modified key (like uppercase letters) we need to send the
+        // modifier ("shift") seperately from the key itself.
+        if (event.modifier != 0) {
+            LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_DOWN, event.modifier);
+        }
+        LiSendKeyboardEvent(event.keycode, KEY_ACTION_DOWN, event.modifier);
+        usleep(50 * 1000);
+        LiSendKeyboardEvent(event.keycode, KEY_ACTION_UP, event.modifier);
+        if (event.modifier != 0) {
+            LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_UP, event.modifier);
+        }
+    });
+#endif
 }
 
 - (BOOL)canBecomeFirstResponder {
@@ -319,6 +329,7 @@
     return commands;
 }
 
+#ifdef USE_RAW_KEY_EVENTS
 
 #pragma mark - UIKeyCommand
 
@@ -530,5 +541,6 @@ static struct KeyMapping keys[] = {
     return modifiers;
 }
 
+#endif
 
 @end
