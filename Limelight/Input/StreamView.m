@@ -340,7 +340,21 @@
     BOOL isKeyDown = [[event valueForKey:@"_isKeyDown"] boolValue];
     NSUInteger modifierFlags = [self translateKeyModifierFlags:[[event valueForKey:@"_modifierFlags"] unsignedIntegerValue]];
 
-    LiSendKeyboardEvent(keyCode, isKeyDown ? KEY_ACTION_DOWN : KEY_ACTION_UP, modifierFlags);
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+        if (keyCode == 0xC0 && (modifierFlags & MODIFIER_CTRL)) { // Tilde/Grave
+            if (isKeyDown) {
+                LiSendKeyboardEvent(0xA2, KEY_ACTION_UP, 0); // Control up
+                usleep(50 * 1000);
+                LiSendKeyboardEvent(0x1B, KEY_ACTION_DOWN, 0); // ESC down
+            } else {
+                LiSendKeyboardEvent(0x1B, KEY_ACTION_UP, 0); // ESC up
+            }
+            
+            return;
+        }
+        
+        LiSendKeyboardEvent(keyCode, isKeyDown ? KEY_ACTION_DOWN : KEY_ACTION_UP, modifierFlags);
+    });
 
     return nil;
 }
