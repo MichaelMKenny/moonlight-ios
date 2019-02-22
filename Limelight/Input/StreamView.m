@@ -13,6 +13,10 @@
 #import "ControllerSupport.h"
 #import "KeyboardSupport.h"
 
+@interface StreamView ()
+@property (nonatomic, strong) NSDictionary *mappings;
+@end
+
 @implementation StreamView {
     CGPoint touchLocation, originalLocation;
     BOOL touchMoved;
@@ -27,6 +31,10 @@
     float screenFactor;
     
     NSDictionary<NSString *, NSNumber *> *dictCodes;
+}
+
+- (void)didMoveToWindow {
+    [self initializeKeyMappings];
 }
 
 - (void) setMouseDeltaFactors:(float)x y:(float)y {
@@ -200,41 +208,41 @@
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
-    // This method is called when the "Return" key is pressed.
-    LiSendKeyboardEvent(0x0d, KEY_ACTION_DOWN, 0);
-    usleep(50 * 1000);
-    LiSendKeyboardEvent(0x0d, KEY_ACTION_UP, 0);
+//    // This method is called when the "Return" key is pressed.
+//    LiSendKeyboardEvent(0x0d, KEY_ACTION_DOWN, 0);
+//    usleep(50 * 1000);
+//    LiSendKeyboardEvent(0x0d, KEY_ACTION_UP, 0);
     return NO;
 }
 
 - (void)onKeyboardPressed:(UITextField *)textField {
-    NSString* inputText = textField.text;
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-        // If the text became empty, we know the user pressed the backspace key.
-        if ([inputText isEqual:@""]) {
-            LiSendKeyboardEvent(0x08, KEY_ACTION_DOWN, 0);
-            usleep(50 * 1000);
-            LiSendKeyboardEvent(0x08, KEY_ACTION_UP, 0);
-        } else {
-            // Character 0 will be our known sentinel value
-            for (int i = 1; i < [inputText length]; i++) {
-                struct KeyEvent event = [KeyboardSupport translateKeyEvent:[inputText characterAtIndex:i] withModifierFlags:0];
-                if (event.keycode == 0) {
-                    // If we don't know the code, don't send anything.
-                    Log(LOG_W, @"Unknown key code: [%c]", [inputText characterAtIndex:i]);
-                    continue;
-                }
-                [self sendLowLevelEvent:event];
-            }
-        }
-    });
-    
-    // Reset text field back to known state
-    textField.text = @"0";
-    
-    // Move the insertion point back to the end of the text box
-    UITextRange *textRange = [textField textRangeFromPosition:textField.endOfDocument toPosition:textField.endOfDocument];
-    [textField setSelectedTextRange:textRange];
+//    NSString* inputText = textField.text;
+//    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+//        // If the text became empty, we know the user pressed the backspace key.
+//        if ([inputText isEqual:@""]) {
+//            LiSendKeyboardEvent(0x08, KEY_ACTION_DOWN, 0);
+//            usleep(50 * 1000);
+//            LiSendKeyboardEvent(0x08, KEY_ACTION_UP, 0);
+//        } else {
+//            // Character 0 will be our known sentinel value
+//            for (int i = 1; i < [inputText length]; i++) {
+//                struct KeyEvent event = [KeyboardSupport translateKeyEvent:[inputText characterAtIndex:i] withModifierFlags:0];
+//                if (event.keycode == 0) {
+//                    // If we don't know the code, don't send anything.
+//                    Log(LOG_W, @"Unknown key code: [%c]", [inputText characterAtIndex:i]);
+//                    continue;
+//                }
+//                [self sendLowLevelEvent:event];
+//            }
+//        }
+//    });
+//
+//    // Reset text field back to known state
+//    textField.text = @"0";
+//
+//    // Move the insertion point back to the end of the text box
+//    UITextRange *textRange = [textField textRangeFromPosition:textField.endOfDocument toPosition:textField.endOfDocument];
+//    [textField setSelectedTextRange:textRange];
 }
 
 - (void)specialCharPressed:(UIKeyCommand *)cmd {
@@ -249,19 +257,19 @@
 }
 
 - (void)sendLowLevelEvent:(struct KeyEvent)event {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-        // When we want to send a modified key (like uppercase letters) we need to send the
-        // modifier ("shift") seperately from the key itself.
-        if (event.modifier != 0) {
-            LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_DOWN, event.modifier);
-        }
-        LiSendKeyboardEvent(event.keycode, KEY_ACTION_DOWN, event.modifier);
-        usleep(50 * 1000);
-        LiSendKeyboardEvent(event.keycode, KEY_ACTION_UP, event.modifier);
-        if (event.modifier != 0) {
-            LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_UP, event.modifier);
-        }
-    });
+//    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+//        // When we want to send a modified key (like uppercase letters) we need to send the
+//        // modifier ("shift") seperately from the key itself.
+//        if (event.modifier != 0) {
+//            LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_DOWN, event.modifier);
+//        }
+//        LiSendKeyboardEvent(event.keycode, KEY_ACTION_DOWN, event.modifier);
+//        usleep(50 * 1000);
+//        LiSendKeyboardEvent(event.keycode, KEY_ACTION_UP, event.modifier);
+//        if (event.modifier != 0) {
+//            LiSendKeyboardEvent(event.modifierKeycode, KEY_ACTION_UP, event.modifier);
+//        }
+//    });
 }
 
 - (BOOL)canBecomeFirstResponder {
@@ -310,5 +318,203 @@
     
     return commands;
 }
+
+
+#pragma mark - UIKeyCommand
+
+- (UIKeyCommand *)_keyCommandForEvent:(UIEvent *)event { // UIPhysicalKeyboardEvent
+    NSLog(@"keyCommandForEvent: %@\n\
+          type = %li\n\
+          keycode = %@\n\
+          keydown = %@\n\
+          key = %@\n\
+          modifierFlags = %@\n\n",
+          event.debugDescription,
+          (long)event.type,
+          [event valueForKey:@"_keyCode"],
+          [event valueForKey:@"_isKeyDown"],
+          [event valueForKey:@"_unmodifiedInput"],
+          [event valueForKey:@"_modifierFlags"]);
+
+    unsigned short keyCode = [self translateKeyCode:[[event valueForKey:@"_keyCode"] unsignedShortValue]];
+    BOOL isKeyDown = [[event valueForKey:@"_isKeyDown"] boolValue];
+    NSUInteger modifierFlags = [self translateKeyModifierFlags:[[event valueForKey:@"_modifierFlags"] unsignedIntegerValue]];
+
+    LiSendKeyboardEvent(keyCode, isKeyDown ? KEY_ACTION_DOWN : KEY_ACTION_UP, modifierFlags);
+
+    return nil;
+}
+
+// Copied from Carbon framework on macOS
+typedef NS_OPTIONS(NSUInteger, NSEventModifierFlags) {
+    NSEventModifierFlagCapsLock           = 1 << 16, // Set if Caps Lock key is pressed.
+    NSEventModifierFlagShift              = 1 << 17, // Set if Shift key is pressed.
+    NSEventModifierFlagControl            = 1 << 18, // Set if Control key is pressed.
+    NSEventModifierFlagOption             = 1 << 19, // Set if Option or Alternate key is pressed.
+    NSEventModifierFlagCommand            = 1 << 20, // Set if Command key is pressed.
+    NSEventModifierFlagNumericPad         = 1 << 21, // Set if any key in the numeric keypad is pressed.
+    NSEventModifierFlagHelp               = 1 << 22, // Set if the Help key is pressed.
+    NSEventModifierFlagFunction           = 1 << 23, // Set if any function key is pressed.
+    
+    // Used to retrieve only the device-independent modifier flags, allowing applications to mask off the device-dependent modifier flags, including event coalescing information.
+    NSEventModifierFlagDeviceIndependentFlagsMask    = 0xffff0000UL
+};
+
+struct KeyMapping {
+    unsigned short iOS;
+    short windows;
+};
+
+static struct KeyMapping keys[] = {
+    {4, 'A'},
+    {5, 'B'},
+    {6, 'C'},
+    {7, 'D'},
+    {8, 'E'},
+    {9, 'F'},
+    {10, 'G'},
+    {11, 'H'},
+    {12, 'I'},
+    {13, 'J'},
+    {14, 'K'},
+    {15, 'L'},
+    {16, 'M'},
+    {17, 'N'},
+    {18, 'O'},
+    {19, 'P'},
+    {20, 'Q'},
+    {21, 'R'},
+    {22, 'S'},
+    {23, 'T'},
+    {24, 'U'},
+    {25, 'V'},
+    {26, 'W'},
+    {27, 'X'},
+    {28, 'Y'},
+    {29, 'Z'},
+    
+    {39, '0'},
+    {30, '1'},
+    {31, '2'},
+    {32, '3'},
+    {33, '4'},
+    {34, '5'},
+    {35, '6'},
+    {36, '7'},
+    {37, '8'},
+    {38, '9'},
+    
+    {46, 0xBB}, // Equals
+    {45, 0xBD}, // Minus
+    {48, 0xDD}, // RightBracket
+    {47, 0xDB}, // LeftBracket
+    {52, 0xDE}, // Quote
+    {51, 0xBA}, // Semicolon
+    {49, 0xDC}, // Backslash
+    {54, 0xBC}, // Comma
+    {56, 0xBF}, // Slash
+    {55, 0xBE}, // Period
+    {53, 0xC0}, // Grave
+    
+    // Keypad
+    {99, 0x6E}, // Decimal
+    {85, 0x6A}, // Multiply
+    {87, 0x6B}, // Plus
+    {83, 0xFE}, // Clear
+    {84, 0x6F}, // Divide
+    {88, 0x0D}, // Enter
+    {86, 0x6D}, // Minus
+    {103, 0xBB}, // Equals
+    {98, 0x60}, // 0
+    {89, 0x61}, // 1
+    {90, 0x62}, // 2
+    {91, 0x63}, // 3
+    {92, 0x64}, // 4
+    {93, 0x65}, // 5
+    {94, 0x66}, // 6
+    {95, 0x67}, // 7
+    {96, 0x68}, // 8
+    {97, 0x69}, // 9
+    
+    {42, 0x08}, // Delete
+    {43, 0x09}, // Tab
+    {40, 0x0D}, // Return
+    {225, 0xA0}, // Shift
+    {224, 0xA2}, // Control
+    {226, 0xA4}, // Option
+    {57, 0x14}, // CapsLock
+    {41, 0x1B}, // Escape
+    {44, 0x20}, // Space
+    {75, 0x21}, // PageUp
+    {78, 0x22}, // PageDown
+    {77, 0x23}, // End
+    {74, 0x24}, // Home
+    {80, 0x25}, // LeftArrow
+    {82, 0x26}, // UpArrow
+    {79, 0x27}, // RightArrow
+    {81, 0x28}, // DownArrow
+    {76, 0x2E}, // ForwardDelete
+//    {kVK_Help, 0x2F}, // Help
+    {227, 0x5B}, // Command
+    {231, 0x5C}, // RightCommand
+    {229, 0xA1}, // RightShift
+    {230, 0xA5}, // RightOption
+    {228, 0xA3}, // RightControl
+//    {kVK_Mute, 0xAD}, // Mute
+//    {kVK_VolumeDown, 0xAE}, // VolumeDown
+//    {kVK_VolumeUp, 0xAF}, // VolumeUp
+    
+    {58, 0x70}, // F1
+    {59, 0x71}, // F2
+    {60, 0x72}, // F3
+    {61, 0x73}, // F4
+    {62, 0x74}, // F5
+    {63, 0x75}, // F6
+    {64, 0x76}, // F7
+    {65, 0x77}, // F8
+    {66, 0x78}, // F9
+    {67, 0x79}, // F10
+    {68, 0x7A}, // F11
+    {69, 0x7B}, // F12
+    {104, 0x7C}, // F13
+    {105, 0x7D}, // F14
+    {106, 0x7E}, // F15
+    {107, 0x7F}, // F16
+    {108, 0x80}, // F17
+    {109, 0x81}, // F18
+    {110, 0x82}, // F19
+    {111, 0x83}, // F20
+};
+
+- (void)initializeKeyMappings {
+    NSMutableDictionary *d = [NSMutableDictionary dictionary];
+    for (size_t i = 0; i < sizeof(keys) / sizeof(struct KeyMapping); i++) {
+        struct KeyMapping m = keys[i];
+        [d setObject:@(m.windows) forKey:@(m.iOS)];
+    }
+    self.mappings = [NSDictionary dictionaryWithDictionary:d];
+}
+
+- (short)translateKeyCode:(unsigned short)keyCode {
+    if (![self.mappings objectForKey:@(keyCode)]) {
+        return 0;
+    }
+    return [self.mappings[@(keyCode)] shortValue];
+}
+
+- (char)translateKeyModifierFlags:(NSUInteger)modifierFlags {
+    char modifiers = 0;
+    if (modifierFlags & NSEventModifierFlagShift) {
+        modifiers |= MODIFIER_SHIFT;
+    }
+    if (modifierFlags & NSEventModifierFlagControl) {
+        modifiers |= MODIFIER_CTRL;
+    }
+    if (modifierFlags & NSEventModifierFlagOption) {
+        modifiers |= MODIFIER_ALT;
+    }
+    return modifiers;
+}
+
 
 @end
